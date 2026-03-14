@@ -101,7 +101,7 @@ export interface ServerShape {
 /**
  * Server - Service tag for HTTP/WebSocket lifecycle management.
  */
-export class Server extends ServiceMap.Service<Server, ServerShape>()("t3/wsServer/Server") {}
+export class Server extends ServiceMap.Service<Server, ServerShape>()("t3/wsServer/Server") { }
 
 const isServerNotRunningError = (error: Error): boolean => {
   const maybeCode = (error as NodeJS.ErrnoException).code;
@@ -113,11 +113,11 @@ const isServerNotRunningError = (error: Error): boolean => {
 function rejectUpgrade(socket: Duplex, statusCode: number, message: string): void {
   socket.end(
     `HTTP/1.1 ${statusCode} ${statusCode === 401 ? "Unauthorized" : "Bad Request"}\r\n` +
-      "Connection: close\r\n" +
-      "Content-Type: text/plain\r\n" +
-      `Content-Length: ${Buffer.byteLength(message)}\r\n` +
-      "\r\n" +
-      message,
+    "Connection: close\r\n" +
+    "Content-Type: text/plain\r\n" +
+    `Content-Length: ${Buffer.byteLength(message)}\r\n` +
+    "\r\n" +
+    message,
   );
 }
 
@@ -225,11 +225,11 @@ export class ServerLifecycleError extends Schema.TaggedErrorClass<ServerLifecycl
     operation: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
-) {}
+) { }
 
 class RouteRequestError extends Schema.TaggedErrorClass<RouteRequestError>()("RouteRequestError", {
   message: Schema.String,
-}) {}
+}) { }
 
 export const createServer = Effect.fn(function* (): Effect.fn.Return<
   http.Server,
@@ -248,8 +248,8 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
     logWebSocketEvents,
     autoBootstrapProjectFromCwd,
   } = serverConfig;
-  const availableEditors = resolveAvailableEditors();
-  const terminalName = resolveTerminalName();
+  const getAvailableEditors = () => resolveAvailableEditors();
+  const getTerminalName = () => resolveTerminalName();
 
   const gitManager = yield* GitManager;
   const terminalManager = yield* TerminalManager;
@@ -441,13 +441,13 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
             !normalizedRelativePath.includes("/") && !normalizedRelativePath.includes(".");
           const filePath = isIdLookup
             ? resolveAttachmentPathById({
-                stateDir: serverConfig.stateDir,
-                attachmentId: normalizedRelativePath,
-              })
+              stateDir: serverConfig.stateDir,
+              attachmentId: normalizedRelativePath,
+            })
             : resolveAttachmentRelativePath({
-                stateDir: serverConfig.stateDir,
-                relativePath: normalizedRelativePath,
-              });
+              stateDir: serverConfig.stateDir,
+              relativePath: normalizedRelativePath,
+            });
           if (!filePath) {
             respond(
               isIdLookup ? 404 : 400,
@@ -875,8 +875,8 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
           keybindings: keybindingsConfig.keybindings,
           issues: keybindingsConfig.issues,
           providers: providerStatuses,
-          availableEditors,
-          terminalName,
+          availableEditors: getAvailableEditors(),
+          terminalName: getTerminalName(),
         };
 
       case WS_METHODS.serverUpsertKeybinding: {
@@ -932,7 +932,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   });
 
   httpServer.on("upgrade", (request, socket, head) => {
-    socket.on("error", () => {}); // Prevent unhandled `EPIPE`/`ECONNRESET` from crashing the process if the client disconnects mid-handshake
+    socket.on("error", () => { }); // Prevent unhandled `EPIPE`/`ECONNRESET` from crashing the process if the client disconnects mid-handshake
 
     if (authToken) {
       let providedToken: string | null = null;

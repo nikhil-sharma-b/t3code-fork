@@ -6,11 +6,18 @@ import { ChevronDownIcon, FolderClosedIcon, TerminalSquareIcon } from "lucide-re
 import { Button } from "../ui/button";
 import { Group, GroupSeparator } from "../ui/group";
 import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "../ui/menu";
-import { AntigravityIcon, CursorIcon, Icon, VisualStudioCode, Zed } from "../Icons";
+import { AntigravityIcon, CursorIcon, Icon, KittyIcon, VisualStudioCode, Zed } from "../Icons";
 import { isMacPlatform, isWindowsPlatform } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
 
-const resolveOptions = (platform: string, availableEditors: ReadonlyArray<EditorId>) => {
+const resolveTerminalIcon = (terminalName: string): Icon =>
+  terminalName === "Kitty" ? KittyIcon : TerminalSquareIcon;
+
+const resolveOptions = (
+  platform: string,
+  availableEditors: ReadonlyArray<EditorId>,
+  terminalName: string,
+) => {
   const baseOptions: ReadonlyArray<{ label: string; Icon: Icon; value: EditorId }> = [
     {
       label: "Cursor",
@@ -42,8 +49,8 @@ const resolveOptions = (platform: string, availableEditors: ReadonlyArray<Editor
       value: "file-manager",
     },
     {
-      label: "Terminal",
-      Icon: TerminalSquareIcon,
+      label: terminalName,
+      Icon: resolveTerminalIcon(terminalName),
       value: "terminal",
     },
   ];
@@ -54,15 +61,17 @@ export const OpenInPicker = memo(function OpenInPicker({
   keybindings,
   availableEditors,
   openInCwd,
+  terminalName,
 }: {
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   openInCwd: string | null;
+  terminalName: string;
 }) {
   const [preferredEditor, setPreferredEditor] = usePreferredEditor(availableEditors);
   const options = useMemo(
-    () => resolveOptions(navigator.platform, availableEditors),
-    [availableEditors],
+    () => resolveOptions(navigator.platform, availableEditors, terminalName),
+    [availableEditors, terminalName],
   );
   const primaryOption = options.find(({ value }) => value === preferredEditor) ?? null;
 

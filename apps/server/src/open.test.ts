@@ -11,6 +11,7 @@ import {
   launchDetached,
   resolveAvailableEditors,
   resolveEditorLaunch,
+  resolveTerminalName,
   resolveTerminalLaunch,
 } from "./open";
 
@@ -312,4 +313,9 @@ it.layer(NodeServices.layer)("resolveTerminalLaunch", (it) => {
       assert.equal(launch.command, "cmd");
     }),
   );
+});
+
+it("resolveTerminalName returns platform-specific display names", () => {
+  assert.equal(resolveTerminalName("win32"), "Command Prompt");
+  assert.equal(resolveTerminalName("linux"), "Terminal");
 });

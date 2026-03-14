@@ -300,6 +300,24 @@ function resolveDarwinTerminal():
   return { command: "open", rich: false };
 }
 
+/**
+ * Resolve a user-facing terminal display name for the current platform.
+ *
+ * On macOS: Ghostty / Kitty / Terminal
+ * On Windows: Command Prompt
+ * On Linux: Terminal
+ */
+export function resolveTerminalName(platform: NodeJS.Platform = process.platform): string {
+  if (platform === "darwin") {
+    const terminal = resolveDarwinTerminal();
+    if (terminal.command === "ghostty") return "Ghostty";
+    if (terminal.command === "kitty") return "Kitty";
+    return "Terminal";
+  }
+  if (platform === "win32") return "Command Prompt";
+  return "Terminal";
+}
+
 function richTerminalCwdArgs(command: string, cwd: string): ReadonlyArray<string> {
   if (command === "ghostty") return [`--working-directory=${cwd}`];
   if (command === "kitty") return ["--directory", cwd];

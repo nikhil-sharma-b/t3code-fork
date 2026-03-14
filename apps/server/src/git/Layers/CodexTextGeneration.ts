@@ -332,8 +332,8 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         ? "Return a JSON object with keys: subject, body, branch."
         : "Return a JSON object with keys: subject, body.",
       "Rules:",
-      "- subject must be imperative, <= 72 chars, and no trailing period",
-      "- body can be empty string or short bullet points",
+      "- subject must be a single line, imperative, <= 72 chars, and no trailing period",
+      "- body must be an empty string (no multi-line commit messages)",
       ...(wantsBranch
         ? ["- branch must be a short semantic git branch fragment for this change"]
         : []),

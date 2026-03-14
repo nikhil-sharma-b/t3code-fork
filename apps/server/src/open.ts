@@ -226,12 +226,71 @@ function sanitizeSessionName(cwd: string): string {
   return base.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
+function quoteForPosixShell(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
+function quoteForWindowsCmd(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+function escapeForAppleScriptString(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+}
+
+export function buildPosixTmuxBootstrapCommand(cwd: string, sessionName: string): string {
+  const quotedCwd = quoteForPosixShell(cwd);
+  const quotedSessionName = quoteForPosixShell(sessionName);
+  const paneCountCommand = `$(tmux display-message -p -t ${quotedSessionName} '#{window_panes}' 2>/dev/null)`;
+
+  return [
+    `if tmux has-session -t ${quotedSessionName} 2>/dev/null; then`,
+    `if [ "${paneCountCommand}" = "1" ]; then`,
+    `tmux split-window -h -t ${quotedSessionName} -c ${quotedCwd} -p 40;`,
+    `tmux select-pane -L -t ${quotedSessionName};`,
+    "fi;",
+    `exec tmux attach-session -t ${quotedSessionName};`,
+    "fi;",
+    `tmux new-session -d -s ${quotedSessionName} -c ${quotedCwd};`,
+    `tmux split-window -h -t ${quotedSessionName} -c ${quotedCwd} -p 40;`,
+    `tmux select-pane -L -t ${quotedSessionName};`,
+    `exec tmux attach-session -t ${quotedSessionName}`,
+  ].join(" ");
+}
+
+export function buildWindowsTmuxBootstrapCommand(cwd: string, sessionName: string): string {
+  const quotedCwd = quoteForWindowsCmd(cwd);
+
+  return [
+    `tmux has-session -t ${sessionName} 2>nul`,
+    `&& (for /f "usebackq delims=" %p in (\`tmux display-message -p -t ${sessionName} "#{window_panes}" 2^>nul\`) do @if "%p"=="1" tmux split-window -h -t ${sessionName} -c ${quotedCwd} -p 40 && tmux select-pane -L -t ${sessionName}) && tmux attach-session -t ${sessionName}`,
+    `|| (tmux new-session -d -s ${sessionName} -c ${quotedCwd}`,
+    `&& tmux split-window -h -t ${sessionName} -c ${quotedCwd} -p 40`,
+    `&& tmux select-pane -L -t ${sessionName}`,
+    `&& tmux attach-session -t ${sessionName})`,
+  ].join(" ");
+}
+
+export function buildDarwinTerminalAppLaunch(shellCommand: string): EditorLaunch {
+  return {
+    command: "osascript",
+    args: [
+      "-e",
+      'tell application "Terminal" to activate',
+      "-e",
+      `tell application "Terminal" to do script "${escapeForAppleScriptString(shellCommand)}"`,
+    ],
+  };
+}
+
 /**
  * macOS terminal preference order: ghostty → kitty → Terminal.app.
  * Returns the resolved terminal and whether it's a "rich" terminal (ghostty/kitty)
  * that supports `-e` and working-directory flags directly.
  */
-function resolveDarwinTerminal(): { command: string; rich: true } | { command: "open"; rich: false } {
+function resolveDarwinTerminal():
+  | { command: string; rich: true }
+  | { command: "open"; rich: false } {
   if (isCommandAvailable("ghostty")) return { command: "ghostty", rich: true };
   if (isCommandAvailable("kitty")) return { command: "kitty", rich: true };
   return { command: "open", rich: false };
@@ -247,24 +306,31 @@ export const resolveTerminalLaunch = Effect.fnUntraced(function* (
   cwd: string,
   platform: NodeJS.Platform = process.platform,
 ): Effect.fn.Return<EditorLaunch, OpenError> {
+  yield* Effect.void;
   const hasTmux = isCommandAvailable("tmux");
 
   if (hasTmux) {
     const sessionName = `t3-${sanitizeSessionName(cwd)}`;
+    const posixTmuxBootstrapCommand = buildPosixTmuxBootstrapCommand(cwd, sessionName);
 
     if (platform === "darwin") {
       const terminal = resolveDarwinTerminal();
       if (terminal.rich) {
         return {
           command: terminal.command,
-          args: [...richTerminalCwdArgs(terminal.command, cwd), "-e", "tmux", "new-session", "-A", "-s", sessionName],
+          args: [
+            ...richTerminalCwdArgs(terminal.command, cwd),
+            "-e",
+            "sh",
+            "-lc",
+            posixTmuxBootstrapCommand,
+          ],
         };
       }
-      // Fallback: Terminal.app via `open -a Terminal`
-      return {
-        command: "open",
-        args: ["-a", "Terminal", cwd, "--args", "-e", `tmux new-session -A -s ${sessionName}`],
-      };
+      // Fallback: Terminal.app via AppleScript so we can run a shell command reliably.
+      return buildDarwinTerminalAppLaunch(
+        `sh -lc ${quoteForPosixShell(posixTmuxBootstrapCommand)}`,
+      );
     }
 
     if (platform === "win32") {
@@ -275,7 +341,7 @@ export const resolveTerminalLaunch = Effect.fnUntraced(function* (
           "start",
           "cmd",
           "/k",
-          `cd /d "${cwd}" && tmux new-session -A -s ${sessionName}`,
+          `cd /d ${quoteForWindowsCmd(cwd)} && ${buildWindowsTmuxBootstrapCommand(cwd, sessionName)}`,
         ],
       };
     }
@@ -287,7 +353,7 @@ export const resolveTerminalLaunch = Effect.fnUntraced(function* (
 
     return {
       command: terminalEmulator,
-      args: ["-e", `tmux new-session -A -s ${sessionName} -c ${cwd}`],
+      args: ["-e", "sh", "-lc", posixTmuxBootstrapCommand],
     };
   }
 
@@ -300,7 +366,7 @@ export const resolveTerminalLaunch = Effect.fnUntraced(function* (
         args: [...richTerminalCwdArgs(terminal.command, cwd)],
       };
     }
-    return { command: "open", args: ["-a", "Terminal", cwd] };
+    return buildDarwinTerminalAppLaunch(`cd ${quoteForPosixShell(cwd)}`);
   }
   if (platform === "win32") {
     return { command: "cmd", args: ["/c", "start", "cmd", "/k", `cd /d "${cwd}"`] };

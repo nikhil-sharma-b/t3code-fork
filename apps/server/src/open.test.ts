@@ -4,6 +4,9 @@ import { assertSuccess } from "@effect/vitest/utils";
 import { FileSystem, Path, Effect } from "effect";
 
 import {
+  buildDarwinTerminalAppLaunch,
+  buildPosixTmuxBootstrapCommand,
+  buildWindowsTmuxBootstrapCommand,
   isCommandAvailable,
   launchDetached,
   resolveAvailableEditors,
@@ -214,6 +217,49 @@ it.layer(NodeServices.layer)("isCommandAvailable", (it) => {
   );
 });
 
+it("buildPosixTmuxBootstrapCommand creates a 60/40 split for new sessions", () => {
+  const command = buildPosixTmuxBootstrapCommand("/tmp/workspace's", "t3-workspace");
+  assert.include(command, "tmux has-session -t 't3-workspace' 2>/dev/null");
+  assert.include(
+    command,
+    `$(tmux display-message -p -t 't3-workspace' '#{window_panes}' 2>/dev/null)`,
+  );
+  assert.include(
+    command,
+    `if [ "$(tmux display-message -p -t 't3-workspace' '#{window_panes}' 2>/dev/null)" = "1" ]; then`,
+  );
+  assert.include(command, "tmux new-session -d -s 't3-workspace' -c '/tmp/workspace'\"'\"'s'");
+  assert.include(
+    command,
+    "tmux split-window -h -t 't3-workspace' -c '/tmp/workspace'\"'\"'s' -p 40",
+  );
+  assert.include(command, "tmux select-pane -L -t 't3-workspace'");
+  assert.include(command, "exec tmux attach-session -t 't3-workspace'");
+});
+
+it("buildWindowsTmuxBootstrapCommand creates a 60/40 split for new sessions", () => {
+  const command = buildWindowsTmuxBootstrapCommand("C:\\workspace", "t3-workspace");
+  assert.include(command, "tmux has-session -t t3-workspace 2>nul");
+  assert.include(command, 'tmux display-message -p -t t3-workspace "#{window_panes}"');
+  assert.include(command, 'tmux new-session -d -s t3-workspace -c "C:\\workspace"');
+  assert.include(command, 'tmux split-window -h -t t3-workspace -c "C:\\workspace" -p 40');
+  assert.include(command, "tmux select-pane -L -t t3-workspace");
+  assert.include(command, "tmux attach-session -t t3-workspace");
+});
+
+it("buildDarwinTerminalAppLaunch uses osascript to run the shell command", () => {
+  const launch = buildDarwinTerminalAppLaunch("sh -lc 'echo \"hi\" && pwd'");
+  assert.deepEqual(launch, {
+    command: "osascript",
+    args: [
+      "-e",
+      'tell application "Terminal" to activate',
+      "-e",
+      'tell application "Terminal" to do script "sh -lc \'echo \\"hi\\" && pwd\'"',
+    ],
+  });
+});
+
 it.layer(NodeServices.layer)("resolveAvailableEditors", (it) => {
   it.effect("returns installed editors for command launches", () =>
     Effect.gen(function* () {
@@ -251,8 +297,8 @@ it.layer(NodeServices.layer)("resolveTerminalLaunch", (it) => {
   it.effect("returns a valid macOS terminal command", () =>
     Effect.gen(function* () {
       const launch = yield* resolveTerminalLaunch("/tmp/workspace", "darwin");
-      // Depending on the host: ghostty, kitty, or open (Terminal.app fallback)
-      assert.include(["ghostty", "kitty", "open"], launch.command);
+      // Depending on the host: ghostty, kitty, or osascript (Terminal.app fallback)
+      assert.include(["ghostty", "kitty", "osascript"], launch.command);
     }),
   );
 

@@ -254,6 +254,8 @@ export function buildPosixTmuxBootstrapCommand(cwd: string, sessionName: string)
     `tmux new-session -d -s ${quotedSessionName} -c ${quotedCwd};`,
     `tmux split-window -h -t ${quotedSessionName} -c ${quotedCwd} -p 40;`,
     `tmux select-pane -L -t ${quotedSessionName};`,
+    `tmux new-window -t ${quotedSessionName} -c ${quotedCwd};`,
+    `tmux select-window -l -t ${quotedSessionName};`,
     `exec tmux attach-session -t ${quotedSessionName}`,
   ].join(" ");
 }
@@ -267,6 +269,8 @@ export function buildWindowsTmuxBootstrapCommand(cwd: string, sessionName: strin
     `|| (tmux new-session -d -s ${sessionName} -c ${quotedCwd}`,
     `&& tmux split-window -h -t ${sessionName} -c ${quotedCwd} -p 40`,
     `&& tmux select-pane -L -t ${sessionName}`,
+    `&& tmux new-window -t ${sessionName} -c ${quotedCwd}`,
+    `&& tmux select-window -l -t ${sessionName}`,
     `&& tmux attach-session -t ${sessionName})`,
   ].join(" ");
 }

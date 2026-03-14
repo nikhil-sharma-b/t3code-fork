@@ -234,6 +234,8 @@ it("buildPosixTmuxBootstrapCommand creates a 60/40 split for new sessions", () =
     "tmux split-window -h -t 't3-workspace' -c '/tmp/workspace'\"'\"'s' -p 40",
   );
   assert.include(command, "tmux select-pane -L -t 't3-workspace'");
+  assert.include(command, "tmux new-window -t 't3-workspace' -c '/tmp/workspace'\"'\"'s'");
+  assert.include(command, "tmux select-window -l -t 't3-workspace'");
   assert.include(command, "exec tmux attach-session -t 't3-workspace'");
 });
 
@@ -244,6 +246,8 @@ it("buildWindowsTmuxBootstrapCommand creates a 60/40 split for new sessions", ()
   assert.include(command, 'tmux new-session -d -s t3-workspace -c "C:\\workspace"');
   assert.include(command, 'tmux split-window -h -t t3-workspace -c "C:\\workspace" -p 40');
   assert.include(command, "tmux select-pane -L -t t3-workspace");
+  assert.include(command, 'tmux new-window -t t3-workspace -c "C:\\workspace"');
+  assert.include(command, "tmux select-window -l -t t3-workspace");
   assert.include(command, "tmux attach-session -t t3-workspace");
 });
 

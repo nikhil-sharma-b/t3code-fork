@@ -30,7 +30,7 @@ import { AnalyticsService } from "./telemetry/Services/AnalyticsService";
 export class StartupError extends Data.TaggedError("StartupError")<{
   readonly message: string;
   readonly cause?: unknown;
-}> { }
+}> {}
 
 interface CliInput {
   readonly mode: Option.Option<RuntimeMode>;

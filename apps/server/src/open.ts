@@ -56,6 +56,17 @@ function fileManagerCommandForPlatform(platform: NodeJS.Platform): string {
   }
 }
 
+function terminalCommandForPlatform(platform: NodeJS.Platform): string {
+  switch (platform) {
+    case "darwin":
+      return "open";
+    case "win32":
+      return "cmd";
+    default:
+      return "xdg-open";
+  }
+}
+
 function stripWrappingQuotes(value: string): string {
   return value.replace(/^"+|"+$/g, "");
 }
@@ -168,7 +179,14 @@ export function resolveAvailableEditors(
   const available: EditorId[] = [];
 
   for (const editor of EDITORS) {
-    const command = editor.command ?? fileManagerCommandForPlatform(platform);
+    let command: string;
+    if (editor.command) {
+      command = editor.command;
+    } else if (editor.id === "terminal") {
+      command = terminalCommandForPlatform(platform);
+    } else {
+      command = fileManagerCommandForPlatform(platform);
+    }
     if (isCommandAvailable(command, { platform, env })) {
       available.push(editor.id);
     }
@@ -203,6 +221,96 @@ export class Open extends ServiceMap.Service<Open, OpenShape>()("t3/open") {}
 // Implementations
 // ==============================
 
+function sanitizeSessionName(cwd: string): string {
+  const base = cwd.split("/").pop() ?? cwd;
+  return base.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+/**
+ * macOS terminal preference order: ghostty → kitty → Terminal.app.
+ * Returns the resolved terminal and whether it's a "rich" terminal (ghostty/kitty)
+ * that supports `-e` and working-directory flags directly.
+ */
+function resolveDarwinTerminal(): { command: string; rich: true } | { command: "open"; rich: false } {
+  if (isCommandAvailable("ghostty")) return { command: "ghostty", rich: true };
+  if (isCommandAvailable("kitty")) return { command: "kitty", rich: true };
+  return { command: "open", rich: false };
+}
+
+function richTerminalCwdArgs(command: string, cwd: string): ReadonlyArray<string> {
+  if (command === "ghostty") return [`--working-directory=${cwd}`];
+  if (command === "kitty") return ["--directory", cwd];
+  return [];
+}
+
+export const resolveTerminalLaunch = Effect.fnUntraced(function* (
+  cwd: string,
+  platform: NodeJS.Platform = process.platform,
+): Effect.fn.Return<EditorLaunch, OpenError> {
+  const hasTmux = isCommandAvailable("tmux");
+
+  if (hasTmux) {
+    const sessionName = `t3-${sanitizeSessionName(cwd)}`;
+
+    if (platform === "darwin") {
+      const terminal = resolveDarwinTerminal();
+      if (terminal.rich) {
+        return {
+          command: terminal.command,
+          args: [...richTerminalCwdArgs(terminal.command, cwd), "-e", "tmux", "new-session", "-A", "-s", sessionName],
+        };
+      }
+      // Fallback: Terminal.app via `open -a Terminal`
+      return {
+        command: "open",
+        args: ["-a", "Terminal", cwd, "--args", "-e", `tmux new-session -A -s ${sessionName}`],
+      };
+    }
+
+    if (platform === "win32") {
+      return {
+        command: "cmd",
+        args: [
+          "/c",
+          "start",
+          "cmd",
+          "/k",
+          `cd /d "${cwd}" && tmux new-session -A -s ${sessionName}`,
+        ],
+      };
+    }
+
+    // Linux: use a shell wrapper so xdg-open or x-terminal-emulator picks the default terminal
+    const terminalEmulator = isCommandAvailable("x-terminal-emulator")
+      ? "x-terminal-emulator"
+      : terminalCommandForPlatform(platform);
+
+    return {
+      command: terminalEmulator,
+      args: ["-e", `tmux new-session -A -s ${sessionName} -c ${cwd}`],
+    };
+  }
+
+  // No tmux: open the terminal in the target directory
+  if (platform === "darwin") {
+    const terminal = resolveDarwinTerminal();
+    if (terminal.rich) {
+      return {
+        command: terminal.command,
+        args: [...richTerminalCwdArgs(terminal.command, cwd)],
+      };
+    }
+    return { command: "open", args: ["-a", "Terminal", cwd] };
+  }
+  if (platform === "win32") {
+    return { command: "cmd", args: ["/c", "start", "cmd", "/k", `cd /d "${cwd}"`] };
+  }
+  const terminalEmulator = isCommandAvailable("x-terminal-emulator")
+    ? "x-terminal-emulator"
+    : "xterm";
+  return { command: terminalEmulator, args: ["--working-directory", cwd] };
+});
+
 export const resolveEditorLaunch = Effect.fnUntraced(function* (
   input: OpenInEditorInput,
   platform: NodeJS.Platform = process.platform,
@@ -216,6 +324,10 @@ export const resolveEditorLaunch = Effect.fnUntraced(function* (
     return shouldUseGotoFlag(editorDef.id, input.cwd)
       ? { command: editorDef.command, args: ["--goto", input.cwd] }
       : { command: editorDef.command, args: [input.cwd] };
+  }
+
+  if (editorDef.id === "terminal") {
+    return yield* resolveTerminalLaunch(input.cwd, platform);
   }
 
   if (editorDef.id !== "file-manager") {

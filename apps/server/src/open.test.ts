@@ -8,6 +8,7 @@ import {
   launchDetached,
   resolveAvailableEditors,
   resolveEditorLaunch,
+  resolveTerminalLaunch,
 } from "./open";
 
 it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
@@ -227,6 +228,38 @@ it.layer(NodeServices.layer)("resolveAvailableEditors", (it) => {
         PATHEXT: ".COM;.EXE;.BAT;.CMD",
       });
       assert.deepEqual(editors, ["cursor", "file-manager"]);
+    }),
+  );
+
+  it.effect("includes terminal when platform terminal command is available", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-editors-" });
+
+      yield* fs.writeFileString(path.join(dir, "cmd.CMD"), "@echo off\r\n");
+      const editors = resolveAvailableEditors("win32", {
+        PATH: dir,
+        PATHEXT: ".COM;.EXE;.BAT;.CMD",
+      });
+      assert.include(editors, "terminal");
+    }),
+  );
+});
+
+it.layer(NodeServices.layer)("resolveTerminalLaunch", (it) => {
+  it.effect("returns a valid macOS terminal command", () =>
+    Effect.gen(function* () {
+      const launch = yield* resolveTerminalLaunch("/tmp/workspace", "darwin");
+      // Depending on the host: ghostty, kitty, or open (Terminal.app fallback)
+      assert.include(["ghostty", "kitty", "open"], launch.command);
+    }),
+  );
+
+  it.effect("returns win32 terminal command", () =>
+    Effect.gen(function* () {
+      const launch = yield* resolveTerminalLaunch("C:\\workspace", "win32");
+      assert.equal(launch.command, "cmd");
     }),
   );
 });

@@ -1541,6 +1541,14 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
           toPermissionMode(providerOptions?.permissionMode) ??
           (input.runtimeMode === "full-access" ? "bypassPermissions" : undefined);
 
+        const modelOptions = input.modelOptions?.claudeCode;
+        const thinkingConfig: { thinking?: { type: "adaptive" } | { type: "disabled" } } =
+          modelOptions?.thinking === false
+            ? { thinking: { type: "disabled" } }
+            : modelOptions?.thinking === true
+              ? { thinking: { type: "adaptive" } }
+              : {};
+
         const queryOptions: ClaudeQueryOptions = {
           ...(input.cwd ? { cwd: input.cwd } : {}),
           ...(input.model ? { model: input.model } : {}),
@@ -1554,6 +1562,8 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
           ...(providerOptions?.maxThinkingTokens !== undefined
             ? { maxThinkingTokens: providerOptions.maxThinkingTokens }
             : {}),
+          ...thinkingConfig,
+          ...(modelOptions?.effort ? { effort: modelOptions.effort } : {}),
           ...(resumeState?.resume ? { resume: resumeState.resume } : {}),
           ...(resumeState?.resumeSessionAt ? { resumeSessionAt: resumeState.resumeSessionAt } : {}),
           includePartialMessages: true,
